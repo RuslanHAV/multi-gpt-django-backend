@@ -36,6 +36,7 @@ PERSONALITY='general assistant'
 global conversation
 
 class LibForEmbedding:
+        
     def get_vectorstore(text_chunks):
         embeddings = OpenAIEmbeddings()
         vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
@@ -62,21 +63,25 @@ class LibForEmbedding:
 
         cleaned_text_content = soup.get_text()
         return text
-
-
-    def get_pdfs_text(pdf_docs):
-        text = ""
-        for pdf in pdf_docs:
-            text += get_pdf_text(pdf)
-        return text
-
-
+    
     # Single PDF
     def get_pdf_text(pdf):
         text = ""
+        print('get_pdf_text = ', pdf)
         pdf_reader = PdfReader(pdf)
         for page in pdf_reader.pages:
             text += page.extract_text()
+        return text
+
+    def get_pdfs_text(pdf_docs):
+        text = ""
+        print('pdf_docs = ', pdf_docs)
+        for pdf in pdf_docs:
+            text_temp = ""
+            pdf_reader = PdfReader(pdf)
+            for page in pdf_reader.pages:
+                text_temp += page.extract_text()
+            text += text_temp
         return text
 
 
@@ -98,8 +103,8 @@ class LibForEmbedding:
         return num_tokens, tokens
 
 
-#!  register
-class Embedding(APIView):
+#!  registerEmbeddingPDF
+class EmbeddingURL(APIView):
     renderer_classes = [UserRenderer]
 
     def post(self, request, format=None):
@@ -111,13 +116,32 @@ class Embedding(APIView):
         raw_text = LibForEmbedding.get_url_text(url)
         text_chunks = LibForEmbedding.get_text_chunks(raw_text)
         vectorstore = LibForEmbedding.get_vectorstore(text_chunks)
-        conversation = LibForEmbedding.get_conversation_chain(
+        request.session.conversation = LibForEmbedding.get_conversation_chain(
             vectorstore, temp=TEMP, model=MODEL)
-        print('conversation = ', conversation)
-        result = conversation({'question': (prompt + user_promts)})
-        print('vectorstore = ', result['chat_history'])
-        print("enumerate(reversed(result['chat_history'])) = ", enumerate(reversed(result['chat_history'])))
-        return Response({"token": '123', "message": json.dumps(result['chat_history']) }, status=status.HTTP_201_CREATED)    
+
+        return Response({"token": '123', "message": "" }, status=status.HTTP_201_CREATED)    
+    
+    
+class EmbeddingPDF(APIView):
+    renderer_classes = [UserRenderer]
+
+    def post(self, request, format=None):
+        input_data = request.data
+        print('request.session = ', request.session )
+        if request.session.has_key('conversation'):
+            print('request.session.conversation = ', request.session.conversation)
+        file = request.data.getlist('newFile[]')
+        prompt = set_prompt(PERSONALITY)
+        request.session["conversation"] = None
+        raw_text = LibForEmbedding.get_pdfs_text(file)
+        text_chunks = LibForEmbedding.get_text_chunks(raw_text)
+        vectorstore = LibForEmbedding.get_vectorstore(text_chunks)
+        
+        request.session.conversation = LibForEmbedding.get_conversation_chain(
+            vectorstore, temp=TEMP, model=MODEL)
+
+        
+        return Response({"status": 'success', "data": vectorstore }, status=status.HTTP_201_CREATED)    
 
 class CHAT(APIView):
     
@@ -125,11 +149,11 @@ class CHAT(APIView):
         input_data = request.data
         user_promts = input_data['userPrompts']
         prompt = set_prompt(PERSONALITY)
-        print('request.session = ', request.session['conversation'] )
+        print('request.session = ', request.session.conversation )
         if request.session.has_key('conversation'):
             print('request.session.conversation = ', request.session.conversation)
         # LibForEmbedding.get_conversation_chain(
         #     user_promts,temp=TEMP, model=MODEL)
-        # conversation_result = request.session.conversation(
-        # {'question': (prompt+user_promts)})
+        conversation_result = request.session.conversation(
+        {'question': (prompt+user_promts)})
         return Response({"status": 'success', "data": prompt}, status=status.HTTP_201_CREATED)    
