@@ -5,7 +5,7 @@ from account.renderers import UserRenderer
 from rest_framework import status
 import json
 
-
+from langchainapp.LangChainAttrForm import LangChainAttrForm
 from werkzeug.utils import secure_filename
 
 from langchain.embeddings import OpenAIEmbeddings, HuggingFaceInstructEmbeddings
@@ -28,6 +28,8 @@ from bs4 import BeautifulSoup
 import requests
 import langchain
 import tiktoken
+
+from .models import LangChainAttr
 
 # Create your views here.
 TEMP=0.5
@@ -127,13 +129,11 @@ class EmbeddingPDF(APIView):
 
     def post(self, request, format=None):
         input_data = request.data
-        print('request.session = ', request.session )
-        if request.session.has_key('conversation'):
-            print('request.session.conversation = ', request.session.conversation)
-        file = request.data.getlist('newFile[]')
+        files = request.FILES.getlist('files')
+
         prompt = set_prompt(PERSONALITY)
         request.session["conversation"] = None
-        raw_text = LibForEmbedding.get_pdfs_text(file)
+        raw_text = LibForEmbedding.get_pdfs_text(files)
         text_chunks = LibForEmbedding.get_text_chunks(raw_text)
         vectorstore = LibForEmbedding.get_vectorstore(text_chunks)
         
@@ -141,7 +141,7 @@ class EmbeddingPDF(APIView):
             vectorstore, temp=TEMP, model=MODEL)
 
         
-        return Response({"status": 'success', "data": vectorstore }, status=status.HTTP_201_CREATED)    
+        return Response({"status": 'success', "data": '213' }, status=status.HTTP_201_CREATED)    
 
 class CHAT(APIView):
     
@@ -157,3 +157,45 @@ class CHAT(APIView):
         conversation_result = request.session.conversation(
         {'question': (prompt+user_promts)})
         return Response({"status": 'success', "data": prompt}, status=status.HTTP_201_CREATED)    
+
+class LangAttr(APIView):
+    
+    def post(self, request, format=None):
+        input_data = request.data
+        open_ai_key = input_data['openAIKey']
+        prompts = input_data['prompts']
+        save_data = None
+        if save_data is None:
+            save_data = {}
+        save_data['attribute'] = ''
+        save_data['attr_type'] = ''
+        save_data['is_active'] = 1
+        
+        if open_ai_key != "":
+            save_data['attribute'] = open_ai_key
+            save_data['attr_type'] = 'open_ai_key'
+            save_data['is_active'] = 1
+            
+        if prompts != "":
+            save_data['attribute'] = prompts
+            save_data['attr_type'] = 'prompts'
+            save_data['is_active'] = 1
+            
+        if open_ai_key == "" and prompts == ""  :
+            return Response({"message": "Invalid input parameter" }, status=status.HTTP_201_CREATED)    
+        form = LangChainAttrForm(save_data)  
+        se = LangChainAttrForm(save_data)  
+        if form.is_valid(): 
+            try: 
+                form.save()  
+                return Response({"status": "success", "message": "save successfully"}, status=status.HTTP_201_CREATED)  
+            except:  
+                pass  
+        form = LangChainAttrForm()  
+        return Response({"status": "success", "message": "save successfully"}, status=status.HTTP_201_CREATED)  
+        
+
+
+class GetLangAttr(APIView):
+    def post(self, request, format=None):
+        input_data = request.data
