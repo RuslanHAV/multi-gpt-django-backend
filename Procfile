@@ -1,1 +1,1 @@
-web: python wsgi.py
+web: python multi-gpt-django-backend.wsgi
