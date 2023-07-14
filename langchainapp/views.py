@@ -10,10 +10,16 @@ from werkzeug.utils import secure_filename
 
 from langchain.embeddings import OpenAIEmbeddings, HuggingFaceInstructEmbeddings
 from langchain.vectorstores import FAISS
+from langchain.vectorstores import Pinecone
 from langchain.chat_models import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationalRetrievalChain
 from langchain.llms import HuggingFaceHub
+
+from langchain.retrievers.self_query.base import SelfQueryRetriever
+from langchain.chains import RetrievalQA
+
+from langchain.chains.query_constructor.base import AttributeInfo
 
 from langchainapp.htmlTemplates import css, bot_template, user_template
 from langchainapp.prompts import set_prompt
@@ -28,6 +34,7 @@ from bs4 import BeautifulSoup
 import requests
 import langchain
 import tiktoken
+import pinecone
 
 from .models import LangChainAttr
 
@@ -35,13 +42,25 @@ from .models import LangChainAttr
 TEMP=0.5
 MODEL='gpt-3.5-turbo'
 PERSONALITY='general assistant'
+EMBEDDING_TYPE = ''
+EMBEDDING_VAL = ''
+PINECONE_INDEX_NAME = os.environ["PINECONE_INDEX_NAME"]
 global conversation
 
 class LibForEmbedding:
         
     def get_vectorstore(text_chunks):
+        pinecone.init(
+            api_key=os.environ["PINECONE_API_KEY"],  # find at app.pinecone.io
+            environment=os.environ["PINECONE_ENVIRONMENT"],  # next to api key in console
+        )
+        
+        index_name = "langchaindb"
+        
         embeddings = OpenAIEmbeddings()
-        vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
+        metadata = {id: EMBEDDING_VAL, type: EMBEDDING_TYPE}
+        vectorstore = Pinecone.from_texts(texts=text_chunks, metadata=metadata, embedding=embeddings, index_name=index_name)
+        # vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
         return vectorstore
 
     def get_conversation_chain(vectorstore, temp, model):
@@ -69,7 +88,6 @@ class LibForEmbedding:
     # Single PDF
     def get_pdf_text(pdf):
         text = ""
-        print('get_pdf_text = ', pdf)
         pdf_reader = PdfReader(pdf)
         for page in pdf_reader.pages:
             text += page.extract_text()
@@ -77,13 +95,19 @@ class LibForEmbedding:
 
     def get_pdfs_text(pdf_docs):
         text = ""
-        print('pdf_docs = ', pdf_docs)
         for pdf in pdf_docs:
             text_temp = ""
             pdf_reader = PdfReader(pdf)
             for page in pdf_reader.pages:
                 text_temp += page.extract_text()
             text += text_temp
+        return text
+
+    def get_txts_text(txt_files):
+        text = ""
+        for txt in txt_files:
+            for line in txt:
+                text = text +  str(line.decode())
         return text
 
 
@@ -112,8 +136,10 @@ class EmbeddingURL(APIView):
     def post(self, request, format=None):
         input_data = request.data
         url = input_data['site_url']
-        user_promts = input_data['userPrompts']
+        # user_promts = input_data['userPrompts']
         prompt = set_prompt(PERSONALITY)
+        EMBEDDING_VAL = url
+        EMBEDDING_TYPE = 'url'
         request.session["conversation"] = None
         raw_text = LibForEmbedding.get_url_text(url)
         text_chunks = LibForEmbedding.get_text_chunks(raw_text)
@@ -133,6 +159,8 @@ class EmbeddingPDF(APIView):
 
         prompt = set_prompt(PERSONALITY)
         request.session["conversation"] = None
+        EMBEDDING_VAL = files
+        EMBEDDING_TYPE = 'pdf'
         raw_text = LibForEmbedding.get_pdfs_text(files)
         text_chunks = LibForEmbedding.get_text_chunks(raw_text)
         vectorstore = LibForEmbedding.get_vectorstore(text_chunks)
@@ -141,7 +169,49 @@ class EmbeddingPDF(APIView):
             vectorstore, temp=TEMP, model=MODEL)
 
         
-        return Response({"status": 'success', "data": '213' }, status=status.HTTP_201_CREATED)    
+        return Response({"status": 'success', "data": 'success' }, status=status.HTTP_201_CREATED)
+
+
+class EmbeddingCSV(APIView):
+    renderer_classes = [UserRenderer]
+
+    def post(self, request, format=None):
+        input_data = request.data
+        files = request.FILES.getlist('files')
+
+        prompt = set_prompt(PERSONALITY)
+        request.session["conversation"] = None
+        raw_text = LibForEmbedding.get_pdfs_text(files)
+        text_chunks = LibForEmbedding.get_text_chunks(raw_text)
+        vectorstore = LibForEmbedding.get_vectorstore(text_chunks)
+        
+        request.session.conversation = LibForEmbedding.get_conversation_chain(
+            vectorstore, temp=TEMP, model=MODEL)
+
+        
+        return Response({"status": 'success', "data": 'success' }, status=status.HTTP_201_CREATED)    
+
+
+class EmbeddingTXT(APIView):
+    renderer_classes = [UserRenderer]
+
+    def post(self, request, format=None):
+        input_data = request.data
+        files = request.FILES.getlist('files')
+        EMBEDDING_VAL = files   
+        EMBEDDING_TYPE = 'txt'
+        prompt = set_prompt(PERSONALITY)
+        request.session["conversation"] = None
+        raw_text = LibForEmbedding.get_txts_text(files)
+        text_chunks = LibForEmbedding.get_text_chunks(raw_text)
+        vectorstore = LibForEmbedding.get_vectorstore(text_chunks)
+        
+        request.session.conversation = LibForEmbedding.get_conversation_chain(
+            vectorstore, temp=TEMP, model=MODEL)
+
+        
+        return Response({"status": 'success', "data": 'success' }, status=status.HTTP_201_CREATED)    
+    
 
 class CHAT(APIView):
     
@@ -149,14 +219,25 @@ class CHAT(APIView):
         input_data = request.data
         user_promts = input_data['userPrompts']
         prompt = set_prompt(PERSONALITY)
-        print('request.session = ', request.session.conversation )
-        if request.session.has_key('conversation'):
-            print('request.session.conversation = ', request.session.conversation)
-        # LibForEmbedding.get_conversation_chain(
-        #     user_promts,temp=TEMP, model=MODEL)
-        conversation_result = request.session.conversation(
-        {'question': (prompt+user_promts)})
-        return Response({"status": 'success', "data": prompt}, status=status.HTTP_201_CREATED)    
+        history = []
+        if 'history' in input_data:
+            history = input_data['history']
+        MODEL = input_data['modal']
+        
+        
+        stripped_user_promps = user_promts.strip()
+        index = pinecone.Index(PINECONE_INDEX_NAME)
+        embedding = OpenAIEmbeddings()
+        vectorstore = Pinecone(index, embedding.embed_query, "text")
+        conversation = LibForEmbedding.get_conversation_chain(
+            vectorstore, temp=TEMP, model=MODEL)
+        temp = [tuple((row[0], row[1]) for row in history)]
+        
+        conversation_result = conversation(
+        {'question': (prompt+user_promts), "chat_history": temp})
+        history.append(tuple(([user_promts, conversation_result['answer']])))
+        
+        return Response({"status": 'success', "answer": conversation_result['answer'], "history" :history }, status=status.HTTP_201_CREATED)    
 
 class LangAttr(APIView):
     
