@@ -313,7 +313,7 @@ class LangSlack(APIView):
         client.chat_postMessage(channel='#multigpt-slackbot',text=conversation_result['answer'])
                 # return HttpResponse(status=200)
 
-        content = '{"challenge":"3eZbrw1aBm2rZgRNFdxV2595E9CY3gmdALWMmHkvFXO7tYXAYM8P"}'
+        content = {"challenge":"3eZbrw1aBm2rZgRNFdxV2595E9CY3gmdALWMmHkvFXO7tYXAYM8P"}
         return Response(content, status=status.HTTP_200_OK, content_type='application/json')
         
         # slack_event_adapter = SlackEventAdapter(SIGNING_SECRET, '/api/langchain/slack_bot', 'https://816b-188-43-14-13.ngrok-free.app')
