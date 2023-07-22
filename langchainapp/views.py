@@ -283,38 +283,43 @@ class LangAttr(APIView):
 class LangSlack(APIView):
     def post(self, request, format=None):
         input_data = request.data
-        SLACK_TOKEN=os.environ["SLACK_TOKEN"]
-        SIGNING_SECRET=os.environ["SIGNING_SECRET"]
-        event_callback_type = input_data['event']['type']
-        # if event_callback_type == 'message':
-        # user_id = input_data['event']['user']
-        text = input_data['event']['text']
+        
         # channel_id = input_data['event']['channel']
         # channel_type = input_data['event']['channel_type']
         # timestamp = input_data['event']['ts']
-        
-        print('input_data = ', input_data)
-        prompt = set_prompt(PERSONALITY)
-        history = []
-        MODEL = 'gpt-3.5-turbo'
-        
-        stripped_user_promps = text.strip()
-        index = pinecone.Index(PINECONE_INDEX_NAME)
-        embedding = OpenAIEmbeddings()
-        vectorstore = Pinecone(index, embedding.embed_query, "text")
-        conversation = LibForEmbedding.get_conversation_chain(
-            vectorstore, temp=TEMP, model=MODEL)
-        
-        conversation_result = conversation(
-        {'question': (prompt+text), "chat_history": history})
-        # print ('User ' + user_id + ' has posted message: ' + text + ' in ' + channel_id + ' of channel type: ' + channel_type)
-        # slack_message_received(user_id, channel_id, channel_type, team_id, timestamp, text)
-        client = slack.WebClient(token=SLACK_TOKEN)
-        client.chat_postMessage(channel='#multigpt-slackbot',text=conversation_result['answer'])
-                # return HttpResponse(status=200)
+        if (input_data['challenge']):
+            response_data = {}
+            challenge = input_data['challenge']
+            response_data['challenge'] = challenge
+            return HttpResponse(json.dumps(response_data), content_type="application/json")
+        else : 
+            SLACK_TOKEN=os.environ["SLACK_TOKEN"]
+            SIGNING_SECRET=os.environ["SIGNING_SECRET"]
+            event_callback_type = input_data['event']['type']
+            # if event_callback_type == 'message':
+            # user_id = input_data['event']['user']
+            text = input_data['event']['text']
+            print('input_data = ', input_data)
+            prompt = set_prompt(PERSONALITY)
+            history = []
+            MODEL = 'gpt-3.5-turbo'
+            
+            stripped_user_promps = text.strip()
+            index = pinecone.Index(PINECONE_INDEX_NAME)
+            embedding = OpenAIEmbeddings()
+            vectorstore = Pinecone(index, embedding.embed_query, "text")
+            conversation = LibForEmbedding.get_conversation_chain(
+                vectorstore, temp=TEMP, model=MODEL)
+            
+            conversation_result = conversation(
+            {'question': (prompt+text), "chat_history": history})
+            # print ('User ' + user_id + ' has posted message: ' + text + ' in ' + channel_id + ' of channel type: ' + channel_type)
+            # slack_message_received(user_id, channel_id, channel_type, team_id, timestamp, text)
+            client = slack.WebClient(token=SLACK_TOKEN)
+            client.chat_postMessage(channel='#multigpt-slackbot',text=conversation_result['answer'])
+                    # return HttpResponse(status=200)
 
-        content = {"challenge":"3eZbrw1aBm2rZgRNFdxV2595E9CY3gmdALWMmHkvFXO7tYXAYM8P"}
-        return Response(content, status=status.HTTP_200_OK, content_type='application/json')
+            return Response(status=status.HTTP_200_OK)
         
         # slack_event_adapter = SlackEventAdapter(SIGNING_SECRET, '/api/langchain/slack_bot', 'https://816b-188-43-14-13.ngrok-free.app')
         # return HttpResponse(json.dumps(response_data), content_type="application/json")
