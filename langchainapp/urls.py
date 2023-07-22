@@ -7,6 +7,8 @@ urlpatterns = [
     path('csv_embedding', EmbeddingCSV.as_view(), name="csv_embedding"),
     path('txt_embedding', EmbeddingTXT.as_view(), name="txt_embedding"),
     path('save_attr', LangAttr.as_view(), name="save_attr"),
+    path('slack_bot', LangSlack.as_view(), name="slack-bot"),
     path('get_attr', GetLangAttr.as_view(), name="get_attr"),
+    path('mail_detect', MailDetect.as_view(), name="mail_detect"),
     path('chat', CHAT.as_view(), name="chat"),
 ]

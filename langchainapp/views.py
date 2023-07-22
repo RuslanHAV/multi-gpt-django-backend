@@ -4,6 +4,7 @@ from rest_framework.views import APIView
 from account.renderers import UserRenderer
 from rest_framework import status
 import json
+from django.http import HttpResponse
 
 from langchainapp.LangChainAttrForm import LangChainAttrForm
 from werkzeug.utils import secure_filename
@@ -35,6 +36,9 @@ import requests
 import langchain
 import tiktoken
 import pinecone
+import slack
+
+from slackeventsapi import SlackEventAdapter
 
 from .models import LangChainAttr
 
@@ -147,7 +151,7 @@ class EmbeddingURL(APIView):
         request.session.conversation = LibForEmbedding.get_conversation_chain(
             vectorstore, temp=TEMP, model=MODEL)
 
-        return Response({"token": '123', "message": "" }, status=status.HTTP_201_CREATED)    
+        return Response({"status": 'success', "data": 'success' }, status=status.HTTP_201_CREATED)    
     
     
 class EmbeddingPDF(APIView):
@@ -276,7 +280,48 @@ class LangAttr(APIView):
         return Response({"status": "success", "message": "save successfully"}, status=status.HTTP_201_CREATED)  
         
 
+class LangSlack(APIView):
+    def post(self, request, format=None):
+        input_data = request.data
+        SLACK_TOKEN=os.environ["SLACK_TOKEN"]
+        SIGNING_SECRET=os.environ["SIGNING_SECRET"]
+        event_callback_type = input_data['event']['type']
+        # if event_callback_type == 'message':
+        # user_id = input_data['event']['user']
+        text = input_data['event']['text']
+        # channel_id = input_data['event']['channel']
+        # channel_type = input_data['event']['channel_type']
+        # timestamp = input_data['event']['ts']
+        
+        print('input_data = ', input_data)
+        prompt = set_prompt(PERSONALITY)
+        history = []
+        MODEL = 'gpt-3.5-turbo'
+        
+        stripped_user_promps = text.strip()
+        index = pinecone.Index(PINECONE_INDEX_NAME)
+        embedding = OpenAIEmbeddings()
+        vectorstore = Pinecone(index, embedding.embed_query, "text")
+        conversation = LibForEmbedding.get_conversation_chain(
+            vectorstore, temp=TEMP, model=MODEL)
+        
+        conversation_result = conversation(
+        {'question': (prompt+text), "chat_history": history})
+        # print ('User ' + user_id + ' has posted message: ' + text + ' in ' + channel_id + ' of channel type: ' + channel_type)
+        # slack_message_received(user_id, channel_id, channel_type, team_id, timestamp, text)
+        client = slack.WebClient(token=SLACK_TOKEN)
+        client.chat_postMessage(channel='#multigpt-slackbot',text=conversation_result['answer'])
+                # return HttpResponse(status=200)
+        return Response(status=status.HTTP_200_OK)
+        # slack_event_adapter = SlackEventAdapter(SIGNING_SECRET, '/api/langchain/slack_bot', 'https://816b-188-43-14-13.ngrok-free.app')
+        # return HttpResponse(json.dumps(response_data), content_type="application/json")
+
 
 class GetLangAttr(APIView):
+    def post(self, request, format=None):
+        input_data = request.data
+        
+
+class MailDetect(APIView):
     def post(self, request, format=None):
         input_data = request.data

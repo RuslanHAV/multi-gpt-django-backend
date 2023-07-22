@@ -89,3 +89,6 @@ unstructured
 bs4
 gunicorn
 pinecone-client
+slack
+slackclient
+slackeventsapi
