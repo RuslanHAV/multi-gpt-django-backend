@@ -287,7 +287,7 @@ class LangSlack(APIView):
         # channel_id = input_data['event']['channel']
         # channel_type = input_data['event']['channel_type']
         # timestamp = input_data['event']['ts']
-        if (input_data['challenge']):
+        if 'challenge' in input_data:
             response_data = {}
             challenge = input_data['challenge']
             response_data['challenge'] = challenge
