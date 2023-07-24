@@ -281,13 +281,13 @@ class LangAttr(APIView):
         
 
 class LangSlack(APIView):
-    async def post(self, request, format=None):
+    def post(self, request, format=None):
         input_data = request.data
         
         # channel_id = input_data['event']['channel']
         # channel_type = input_data['event']['channel_type']
         # timestamp = input_data['event']['ts']
-        if 'challenge' in input_data:
+        if (input_data['challenge']):
             response_data = {}
             challenge = input_data['challenge']
             response_data['challenge'] = challenge
@@ -295,31 +295,28 @@ class LangSlack(APIView):
         else : 
             SLACK_TOKEN=os.environ["SLACK_TOKEN"]
             SIGNING_SECRET=os.environ["SIGNING_SECRET"]
-            # event_callback_type = input_data['event']['type']
-
+            event_callback_type = input_data['event']['type']
             # if event_callback_type == 'message':
             # user_id = input_data['event']['user']
-
-            # text = input_data['event']['text']
-            # print('input_data = ', input_data)
-            # prompt = set_prompt(PERSONALITY)
-            # history = []
-            # MODEL = 'gpt-3.5-turbo'
+            text = input_data['event']['text']
+            print('input_data = ', input_data)
+            prompt = set_prompt(PERSONALITY)
+            history = []
+            MODEL = 'gpt-3.5-turbo'
             
-            # stripped_user_promps = text.strip()
-            # index = pinecone.Index(PINECONE_INDEX_NAME)
-            # embedding = OpenAIEmbeddings()
-            # vectorstore = Pinecone(index, embedding.embed_query, "text")
-            # conversation = LibForEmbedding.get_conversation_chain(
-            #     vectorstore, temp=TEMP, model=MODEL)
+            stripped_user_promps = text.strip()
+            index = pinecone.Index(PINECONE_INDEX_NAME)
+            embedding = OpenAIEmbeddings()
+            vectorstore = Pinecone(index, embedding.embed_query, "text")
+            conversation = LibForEmbedding.get_conversation_chain(
+                vectorstore, temp=TEMP, model=MODEL)
             
-            # conversation_result = conversation(
-            # {'question': (prompt+text), "chat_history": history})
-
+            conversation_result = conversation(
+            {'question': (prompt+text), "chat_history": history})
             # print ('User ' + user_id + ' has posted message: ' + text + ' in ' + channel_id + ' of channel type: ' + channel_type)
             # slack_message_received(user_id, channel_id, channel_type, team_id, timestamp, text)
             client = slack.WebClient(token=SLACK_TOKEN)
-            client.chat_postMessage(channel='#multigpt-slackbot',text=input_data['text'])
+            client.chat_postMessage(channel='#multigpt-slackbot',text=conversation_result['answer'])
                     # return HttpResponse(status=200)
 
             return Response(status=status.HTTP_200_OK)
