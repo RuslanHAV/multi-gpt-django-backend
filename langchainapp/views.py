@@ -316,7 +316,7 @@ class LangSlack(APIView):
             # print ('User ' + user_id + ' has posted message: ' + text + ' in ' + channel_id + ' of channel type: ' + channel_type)
             # slack_message_received(user_id, channel_id, channel_type, team_id, timestamp, text)
             client = slack.WebClient(token=SLACK_TOKEN)
-            client.chat_postMessage(channel='#multigpt-slackbot',text=conversation_result['answer'])
+            client.chat_postMessage(channel='#multigpt-slackbot',text=text)
                     # return HttpResponse(status=200)
 
             return Response(status=status.HTTP_200_OK)
