@@ -117,7 +117,7 @@ class LibForEmbedding:
 
     def get_text_chunks(text):
         text_splitter = CharacterTextSplitter(
-            # separator="\n\n",
+            separator="\n",
             chunk_size=1000,
             chunk_overlap=200,
             length_function=len
@@ -298,25 +298,25 @@ class LangSlack(APIView):
             event_callback_type = input_data['event']['type']
             # if event_callback_type == 'message':
             # user_id = input_data['event']['user']
-            # text = input_data['event']['text']
-            # print('input_data = ', input_data)
-            # prompt = set_prompt(PERSONALITY)
-            # history = []
-            # MODEL = 'gpt-3.5-turbo'
+            text = input_data['event']['text']
+            print('input_data = ', input_data)
+            prompt = set_prompt(PERSONALITY)
+            history = []
+            MODEL = 'gpt-3.5-turbo'
             
-            # stripped_user_promps = text.strip()
-            # index = pinecone.Index(PINECONE_INDEX_NAME)
-            # embedding = OpenAIEmbeddings()
-            # vectorstore = Pinecone(index, embedding.embed_query, "text")
-            # conversation = LibForEmbedding.get_conversation_chain(
-            #     vectorstore, temp=TEMP, model=MODEL)
+            stripped_user_promps = text.strip()
+            index = pinecone.Index(PINECONE_INDEX_NAME)
+            embedding = OpenAIEmbeddings()
+            vectorstore = Pinecone(index, embedding.embed_query, "text")
+            conversation = LibForEmbedding.get_conversation_chain(
+                vectorstore, temp=TEMP, model=MODEL)
             
-            # conversation_result = conversation(
-            # {'question': (prompt+text), "chat_history": history})
+            conversation_result = conversation(
+            {'question': (prompt+text), "chat_history": history})
             # print ('User ' + user_id + ' has posted message: ' + text + ' in ' + channel_id + ' of channel type: ' + channel_type)
             # slack_message_received(user_id, channel_id, channel_type, team_id, timestamp, text)
             client = slack.WebClient(token=SLACK_TOKEN)
-            client.chat_postMessage(channel='#multigpt-slackbot',text=input_data['event']['text'])
+            client.chat_postMessage(channel='#multigpt-slackbot',text=conversation_result['answer'])
                     # return HttpResponse(status=200)
 
             return Response(status=status.HTTP_200_OK)
