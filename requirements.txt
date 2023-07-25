@@ -92,3 +92,4 @@ pinecone-client
 slack
 slackclient
 slackeventsapi
+django_thread
