@@ -93,9 +93,8 @@ class LibForEmbedding:
     def get_pdf_text(pdf):
         text = ""
         pdf_reader = PdfReader(pdf)
-        for page in enumerate(pdf_reader.pages):
+        for page in pdf_reader.pages:
             text += page.extract_text()
-        print("text = " + text)
         return text
 
     def get_pdfs_text(pdf_docs):
@@ -118,7 +117,7 @@ class LibForEmbedding:
 
     def get_text_chunks(text):
         text_splitter = CharacterTextSplitter(
-            separator="\n",
+            # separator="\n\n",
             chunk_size=1000,
             chunk_overlap=200,
             length_function=len
