@@ -334,7 +334,7 @@ class LangSlack(APIView):
         conversation_result = conversation(
         {'question': (prompt + text), "chat_history": history})
         client = slack.WebClient(token=SLACK_TOKEN)
-        client.chat_postMessage(channel='#langchain-bot',text=conversation_result['answer'])
+        client.chat_postMessage(channel='#multigpt-slackbot',text=conversation_result['answer'])
         return 'success'
         
     
