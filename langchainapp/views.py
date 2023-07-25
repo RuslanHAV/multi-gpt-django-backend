@@ -95,7 +95,7 @@ class LibForEmbedding:
         pdf_reader = PdfReader(pdf)
         for page in enumerate(pdf_reader.pages):
             text += page.extract_text()
-        print("text = ", text)
+        print("text = " + text)
         return text
 
     def get_pdfs_text(pdf_docs):
