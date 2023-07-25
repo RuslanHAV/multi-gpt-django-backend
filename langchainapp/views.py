@@ -16,6 +16,7 @@ from langchain.chat_models import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationalRetrievalChain
 from langchain.llms import HuggingFaceHub
+from django_thread import Thread
 
 from langchain.retrievers.self_query.base import SelfQueryRetriever
 from langchain.chains import RetrievalQA
@@ -41,6 +42,42 @@ import slack
 from slackeventsapi import SlackEventAdapter
 
 from .models import LangChainAttr
+
+import atexit
+import queue
+import threading
+
+from django.core.mail import mail_admins
+
+
+def _worker():
+    while True:
+        func, args, kwargs = _queue.get()
+        try:
+            res = func(*args, **kwargs)
+        except:
+            print('error')
+            import traceback
+            details = traceback.format_exc()
+            print(details)
+            mail_admins('Background process exception', details)
+        finally:
+            _queue.task_done()  # so we can join at exit
+
+def postpone(func):
+    def decorator(*args, **kwargs):
+        _queue.put((func, args, kwargs))
+    return decorator
+
+_queue = queue.Queue()
+_thread = threading.Thread(target=_worker)
+_thread.daemon = True
+_thread.start()
+
+def _cleanup():
+    _queue.join()   # so we don't exit too soon
+
+atexit.register(_cleanup)
 
 # Create your views here.
 TEMP=0.5
@@ -277,52 +314,46 @@ class LangAttr(APIView):
             except:  
                 pass  
         form = LangChainAttrForm()  
-        return Response({"status": "success", "message": "save successfully"}, status=status.HTTP_201_CREATED)  
-        
+        return Response({"status": "success", "message": "save successfully"}, status=status.HTTP_201_CREATED)      
 
 class LangSlack(APIView):
+
+    @postpone
+    def conversationWithLang(self, text):
+        SLACK_TOKEN=os.environ["SLACK_TOKEN"]
+        SIGNING_SECRET=os.environ["SIGNING_SECRET"]
+        prompt = set_prompt(PERSONALITY)
+        history = []
+        MODEL = 'gpt-3.5-turbo'
+        stripped_user_promps = text.strip()
+        index = pinecone.Index(PINECONE_INDEX_NAME)
+        embedding = OpenAIEmbeddings()
+        vectorstore = Pinecone(index, embedding.embed_query, "text")
+        conversation = LibForEmbedding.get_conversation_chain(
+            vectorstore, temp=TEMP, model=MODEL)
+        conversation_result = conversation(
+        {'question': (prompt + text), "chat_history": history})
+        client = slack.WebClient(token=SLACK_TOKEN)
+        client.chat_postMessage(channel='#langchain-bot',text=conversation_result['answer'])
+        return 'success'
+        
+    
     def post(self, request, format=None):
         input_data = request.data
         
-        # channel_id = input_data['event']['channel']
-        # channel_type = input_data['event']['channel_type']
-        # timestamp = input_data['event']['ts']
         if 'challenge' in input_data:
             response_data = {}
             challenge = input_data['challenge']
             response_data['challenge'] = challenge
             return HttpResponse(json.dumps(response_data), content_type="application/json")
         else : 
-            SLACK_TOKEN=os.environ["SLACK_TOKEN"]
-            SIGNING_SECRET=os.environ["SIGNING_SECRET"]
+            
             event_callback_type = input_data['event']['type']
-            # if event_callback_type == 'message':
-            # user_id = input_data['event']['user']
-            text = input_data['event']['text']
-            print('input_data = ', input_data)
-            prompt = set_prompt(PERSONALITY)
-            history = []
-            MODEL = 'gpt-3.5-turbo'
-            
-            stripped_user_promps = text.strip()
-            index = pinecone.Index(PINECONE_INDEX_NAME)
-            embedding = OpenAIEmbeddings()
-            vectorstore = Pinecone(index, embedding.embed_query, "text")
-            conversation = LibForEmbedding.get_conversation_chain(
-                vectorstore, temp=TEMP, model=MODEL)
-            
-            conversation_result = conversation(
-            {'question': (prompt+text), "chat_history": history})
-            # print ('User ' + user_id + ' has posted message: ' + text + ' in ' + channel_id + ' of channel type: ' + channel_type)
-            # slack_message_received(user_id, channel_id, channel_type, team_id, timestamp, text)
-            client = slack.WebClient(token=SLACK_TOKEN)
-            client.chat_postMessage(channel='#multigpt-slackbot',text=conversation_result['answer'])
-                    # return HttpResponse(status=200)
+            user_message = 'client_msg_id'
 
-            return Response(status=status.HTTP_200_OK)
-        
-        # slack_event_adapter = SlackEventAdapter(SIGNING_SECRET, '/api/langchain/slack_bot', 'https://816b-188-43-14-13.ngrok-free.app')
-        # return HttpResponse(json.dumps(response_data), content_type="application/json")
+            text = input_data['event']['text']
+            self.conversationWithLang(text)
+        return Response(status=status.HTTP_200_OK)
 
 
 class GetLangAttr(APIView):
