@@ -46,9 +46,10 @@ from .models import LangChainAttr
 import atexit
 import queue
 import threading
-
+from django.db.models import Q
+from django.db.models import F
 from django.core.mail import mail_admins
-
+from datetime import datetime, timedelta
 
 def _worker():
     while True:
@@ -88,6 +89,28 @@ EMBEDDING_VAL = ''
 PINECONE_INDEX_NAME = os.environ["PINECONE_INDEX_NAME"]
 global conversation
 
+
+
+class SaveData:
+    @staticmethod
+    def save_attr(id):
+        save_data = None
+        if save_data is None:
+            save_data = {}
+        save_data['attribute'] = id
+        save_data['attr_type'] = 'document'
+        save_data['is_active'] = 1
+        
+        form = LangChainAttrForm(save_data)  
+        se = LangChainAttrForm(save_data)  
+        if form.is_valid(): 
+            try: 
+                form.save()  
+                return 'ok'  
+            except:  
+                pass  
+        form = LangChainAttrForm() 
+
 class LibForEmbedding:
         
     def get_vectorstore(text_chunks):
@@ -118,6 +141,8 @@ class LibForEmbedding:
     def get_url_text(url):
         responseData = requests.get(url)
         content = responseData.text
+        
+        SaveData.save_attr(url)
         soup = BeautifulSoup(content, "html.parser")
         text = soup.get_text()
         for script in soup(["script", "style"]):
@@ -125,6 +150,7 @@ class LibForEmbedding:
 
         cleaned_text_content = soup.get_text()
         return text
+    
     
     # Single PDF
     def get_pdf_text(pdf):
@@ -138,6 +164,7 @@ class LibForEmbedding:
         text = ""
         for pdf in pdf_docs:
             text_temp = ""
+            SaveData.save_attr(pdf)
             pdf_reader = PdfReader(pdf)
             for page in pdf_reader.pages:
                 text_temp += page.extract_text()
@@ -147,6 +174,7 @@ class LibForEmbedding:
     def get_txts_text(txt_files):
         text = ""
         for txt in txt_files:
+            SaveData.save_attr(txt)
             for line in txt:
                 text = text +  str(line.decode())
         return text
@@ -261,19 +289,37 @@ class CHAT(APIView):
         user_promts = input_data['userPrompts']
         prompt = set_prompt(PERSONALITY)
         history = []
+        # files = input_data['files']
         if 'history' in input_data:
             history = input_data['history']
         MODEL = input_data['modal']
         
-        
+        fileList = input_data['fileList']
+        current_date = datetime.now().date()
+        desired_difference = current_date - timedelta(days=7)
+        print('current_date= ', current_date)
+        print('desired_difference = ', desired_difference)
+        # .filter(Q(attribute__in=fileList))    
+        approve_file_list = LangChainAttr.objects.annotate(date_difference=F('created_at') - desired_difference).filter(date_difference__lte=timedelta(days=7))
+        # results = LangChainAttr.objects.annotate(date_difference=F('created_at') - desired_difference).filter(date_difference__lte=timedelta(days=7))
+        print('approve_file_list = ', approve_file_list)
+        if len(approve_file_list) == 0:
+            return Response({"status": 'success', "answer": "expired embedding data.", "history" :history }, status=status.HTTP_201_CREATED)    
+        # print('results = ',results)
         stripped_user_promps = user_promts.strip()
         index = pinecone.Index(PINECONE_INDEX_NAME)
         embedding = OpenAIEmbeddings()
+        # Pinecone.from_texts(texts=text_chunks, metadata=metadata, embedding=embeddings, index_name=index_name)
         vectorstore = Pinecone(index, embedding.embed_query, "text")
+        # vectorstore = Pinecone.from_existing_index(index_name=index, embedding=embedding, filter={id: {"$in": fileList}})
+        # vectorstore = Pinecone.from_texts(texts=stripped_user_promps,embedding=embedding, index_name=PINECONE_INDEX_NAME)
+        # print('vectorstore = ', vectorstore)
+        # index.query(vectorstore, filter={id: {"$in": fileList}},top_k=1,include_metadata=True)
+        
         conversation = LibForEmbedding.get_conversation_chain(
             vectorstore, temp=TEMP, model=MODEL)
         temp = [tuple((row[0], row[1]) for row in history)]
-        
+        # print('conversation = ', conversation)
         conversation_result = conversation(
         {'question': (prompt+user_promts), "chat_history": temp})
         history.append(tuple(([user_promts, conversation_result['answer']])))
@@ -364,3 +410,14 @@ class GetLangAttr(APIView):
 class MailDetect(APIView):
     def post(self, request, format=None):
         input_data = request.data
+        
+class GetEmbeddingData(APIView):
+    def post(self, request, format=None):
+        current_date = datetime.now().date()
+        desired_difference = current_date - timedelta(days=7)
+        file_list = LangChainAttr.objects.annotate(date_difference=F('created_at') - desired_difference).filter(Q(date_difference__lte=timedelta(days=7)) & Q(attr_type='document'))
+        print('file_list = ', file_list)
+        result = []
+        for row in file_list:
+            result.append(row.attribute)
+        return Response(data = result,status=status.HTTP_200_OK)

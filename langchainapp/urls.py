@@ -11,4 +11,5 @@ urlpatterns = [
     path('get_attr', GetLangAttr.as_view(), name="get_attr"),
     path('mail_detect', MailDetect.as_view(), name="mail_detect"),
     path('chat', CHAT.as_view(), name="chat"),
+    path('get_init_file_list', GetEmbeddingData.as_view(), name="get_embedding_data"),
 ]
