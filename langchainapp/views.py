@@ -31,11 +31,14 @@ import os
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.document_loaders import UnstructuredURLLoader
 from langchain.document_loaders import SeleniumURLLoader
+from langchain.document_loaders.csv_loader import CSVLoader
+
 from PyPDF2 import PdfReader
 from bs4 import BeautifulSoup
 import requests
 import langchain
 import tiktoken
+
 import pinecone
 import slack
 
@@ -112,18 +115,21 @@ class SaveData:
         form = LangChainAttrForm() 
 
 class LibForEmbedding:
-        
-    def get_vectorstore(text_chunks):
+    def get_vectorstore(text_chunks, embedding_val):
+        print('5')
         pinecone.init(
             api_key=os.environ["PINECONE_API_KEY"],  # find at app.pinecone.io
             environment=os.environ["PINECONE_ENVIRONMENT"],  # next to api key in console
         )
-        
         index_name = "langchaindb"
-        
         embeddings = OpenAIEmbeddings()
-        metadata = {id: EMBEDDING_VAL, type: EMBEDDING_TYPE}
-        vectorstore = Pinecone.from_texts(texts=text_chunks, metadata=metadata, embedding=embeddings, index_name=index_name)
+        metadata = {id: embedding_val, type: 'document'}
+        print(text_chunks)
+        print(metadata)
+        print(embeddings)
+        vectorstore = Pinecone.from_texts(texts=[str(chunk) for chunk in text_chunks], metadata=metadata, embedding=embeddings, index_name=index_name)
+        # vectorstore = Pinecone.from_texts(texts=text_chunks, metadata=metadata, embedding=embeddings, index_name=index_name)
+        print('9')
         # vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
         return vectorstore
 
@@ -212,7 +218,7 @@ class EmbeddingURL(APIView):
         request.session["conversation"] = None
         raw_text = LibForEmbedding.get_url_text(url)
         text_chunks = LibForEmbedding.get_text_chunks(raw_text)
-        vectorstore = LibForEmbedding.get_vectorstore(text_chunks)
+        vectorstore = LibForEmbedding.get_vectorstore(text_chunks, url)
         request.session.conversation = LibForEmbedding.get_conversation_chain(
             vectorstore, temp=TEMP, model=MODEL)
 
@@ -232,7 +238,7 @@ class EmbeddingPDF(APIView):
         EMBEDDING_TYPE = 'pdf'
         raw_text = LibForEmbedding.get_pdfs_text(files)
         text_chunks = LibForEmbedding.get_text_chunks(raw_text)
-        vectorstore = LibForEmbedding.get_vectorstore(text_chunks)
+        vectorstore = LibForEmbedding.get_vectorstore(text_chunks,files)
         
         request.session.conversation = LibForEmbedding.get_conversation_chain(
             vectorstore, temp=TEMP, model=MODEL)
@@ -248,15 +254,41 @@ class EmbeddingCSV(APIView):
         input_data = request.data
         files = request.FILES.getlist('files')
 
-        prompt = set_prompt(PERSONALITY)
-        request.session["conversation"] = None
-        raw_text = LibForEmbedding.get_pdfs_text(files)
-        text_chunks = LibForEmbedding.get_text_chunks(raw_text)
-        vectorstore = LibForEmbedding.get_vectorstore(text_chunks)
-        
-        request.session.conversation = LibForEmbedding.get_conversation_chain(
-            vectorstore, temp=TEMP, model=MODEL)
+        if len(files) == 0:
+            return Response({"status": 'error', "data": 'validate error' }, status=status.HTTP_201_CREATED)    
 
+        for csv_file in files:
+            EMBEDDING_VAL = files   
+            EMBEDDING_TYPE = 'csv'
+            # Load CSV data into Langchain
+            file_path = 'tmp/temp_uploaded_file.csv'
+            with open(file_path, 'wb+') as destination:
+                for chunk in csv_file.chunks():
+                    destination.write(chunk)
+            destination.close()
+            # print('csv_file = ', csv_file)
+            csv_loader = CSVLoader(
+                'tmp/temp_uploaded_file.csv', 
+                encoding="utf-8",
+                # csv_args={
+                #     # 'quotechar': '"',
+                #     'delimiter': ',',
+                #     'fieldnames': ['furniture','type','url','rate','delivery','sale','price']
+                # },
+            )
+            documents = csv_loader.load()
+            print('1')
+            # Split documents into smaller chunks using Langchain's CharacterTextSplitter
+            text_splitter = CharacterTextSplitter(chunk_size=400, chunk_overlap=0)
+            print('2')
+            text_chunks = text_splitter.split_documents(documents)
+            print('3')
+            print(text_chunks)
+            vectorstore = LibForEmbedding.get_vectorstore(text_chunks,csv_file)
+            print('4')
+            SaveData.save_attr(csv_file)
+            request.session.conversation = LibForEmbedding.get_conversation_chain(
+            vectorstore, temp=TEMP, model=MODEL)
         
         return Response({"status": 'success', "data": 'success' }, status=status.HTTP_201_CREATED)    
 
@@ -273,7 +305,7 @@ class EmbeddingTXT(APIView):
         request.session["conversation"] = None
         raw_text = LibForEmbedding.get_txts_text(files)
         text_chunks = LibForEmbedding.get_text_chunks(raw_text)
-        vectorstore = LibForEmbedding.get_vectorstore(text_chunks)
+        vectorstore = LibForEmbedding.get_vectorstore(text_chunks,files)
         
         request.session.conversation = LibForEmbedding.get_conversation_chain(
             vectorstore, temp=TEMP, model=MODEL)
