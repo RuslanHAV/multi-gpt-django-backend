@@ -54,6 +54,23 @@ from django.db.models import F
 from django.core.mail import mail_admins
 from datetime import datetime, timedelta
 
+import imaplib
+import smtplib
+from email.parser import Parser
+from email.message import EmailMessage
+from email.header import decode_header
+
+
+def sanitize_header(header):
+    decoded_header = decode_header(header)
+    sanitized_header = []
+    for value, encoding in decoded_header:
+        if isinstance(value, bytes):
+            value = value.decode(encoding)
+        sanitized_value = value.replace('\r', '').replace('\n', '')
+        sanitized_header.append(sanitized_value)
+    return ''.join(sanitized_header)
+
 def _worker():
     while True:
         func, args, kwargs = _queue.get()
@@ -441,8 +458,39 @@ class GetLangAttr(APIView):
 
 class MailDetect(APIView):
     def post(self, request, format=None):
-        input_data = request.data
-        
+        server = os.environ["EMAIL_SERVER"]
+        EMAIL_ADDRESS = os.environ["USER_MAIL_ADDRESS"]
+        EMAIL_PASSWORD = os.environ["USER_MAIL_PASSWORD"]
+        with imaplib.IMAP4_SSL('imap.gmail.com') as mail:
+            mail.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+            mail.select('inbox')
+
+            _, data = mail.search(None, 'UNSEEN')
+            for num in data[0].split():
+                _, msg_data = mail.fetch(num, '(RFC822)')
+
+                raw_email = msg_data[0][1]
+                print('raw_email = ', raw_email)
+                msg = EmailMessage()
+                msg = Parser().parsestr(raw_email.decode())
+
+                subject = msg['Subject']
+                sender = msg['From']
+                messages = msg.as_string()
+                print('msg = ', messages)
+                msg = EmailMessage()
+                sanitized_subject = sanitize_header(subject)
+                sanitized_recipient = sanitize_header(sender)
+                msg['Subject'] = f'Re: {sanitized_subject}'
+                msg['From'] = EMAIL_ADDRESS
+                msg['To'] = sanitized_recipient
+                msg.set_content('Thank you for your email. This is an automated response.')
+                with smtplib.SMTP('smtp.gmail.com', 587) as smtp:
+                    smtp.starttls()
+                    smtp.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+                    smtp.send_message(msg)
+        return Response({"status": "success", "message": "save successfully"}, status=status.HTTP_201_CREATED)  
+    
 class GetEmbeddingData(APIView):
     def post(self, request, format=None):
         current_date = datetime.now().date()
