@@ -138,7 +138,7 @@ class LibForEmbedding:
             api_key=os.environ["PINECONE_API_KEY"],  # find at app.pinecone.io
             environment=os.environ["PINECONE_ENVIRONMENT"],  # next to api key in console
         )
-        index_name = "langchaindb"
+        index_name = PINECONE_INDEX_NAME
         embeddings = OpenAIEmbeddings()
         metadata = {id: embedding_val, type: 'document'}
         print(text_chunks)
