@@ -1,3 +1,6 @@
+from .models import LangChainAttr
+from django.db.models import Q
+
 gen_prompt = '''
             You are a general assistant AI chatbot here to assist the user based on the documents they uploaded such as PDF, TXT, CSV and URL,
             and the subsequent openAI embeddings. Please assist the user to the best of your knowledge based on 
@@ -20,8 +23,12 @@ witty_prompt = '''
             based on uploads, embeddings and the following user input. USER INPUT: 
         '''
 
-def set_prompt(PERSONALITY):
-    if PERSONALITY=='general assistant': prompt = gen_prompt
-    elif PERSONALITY == "academic": prompt = acc_prompt
-    elif PERSONALITY == "witty": prompt = witty_prompt
-    return prompt
+def set_prompt():
+    try:
+        latest_record = LangChainAttr.objects.filter(Q(attr_type='prompts')).latest('created_at')
+    except LangChainAttr.DoesNotExist:
+        latest_record = None
+    if latest_record:
+        return latest_record.attribute
+    else: 
+        return gen_prompt
