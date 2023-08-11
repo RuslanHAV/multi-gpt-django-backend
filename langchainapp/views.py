@@ -29,6 +29,7 @@ import os
 import langchain
 
 from langchain.text_splitter import CharacterTextSplitter
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.document_loaders import UnstructuredURLLoader
 from langchain.document_loaders import SeleniumURLLoader
 from langchain.document_loaders.csv_loader import CSVLoader
@@ -133,25 +134,32 @@ class SaveData:
         form = LangChainAttrForm() 
 
 class LibForEmbedding:
-    def get_vectorstore(text_chunks, embedding_val):
-        pinecone.init(
-            api_key=os.environ["PINECONE_API_KEY"],  # find at app.pinecone.io
-            environment=os.environ["PINECONE_ENVIRONMENT"],  # next to api key in console
-        )
-        index_name = PINECONE_INDEX_NAME
-        
-        # openai.api_key = open_ai_key.attribute
+    def get_vectorstore(text_chunks, file_id):
         embeddings = OpenAIEmbeddings(openai_api_key=open_ai_key.attribute)
-        metadata = {id: embedding_val, type: 'document'}
-        vectorstore = Pinecone.from_texts(texts=[str(chunk) for chunk in text_chunks], metadata=metadata, embedding=embeddings, index_name=index_name)
-        # vectorstore = Pinecone.from_texts(texts=text_chunks, metadata=metadata, embedding=embeddings, index_name=index_name)
-        # vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
+
+        # PineCone
+        # pinecone.init(
+        #     api_key=os.environ["PINECONE_API_KEY"],  # find at app.pinecone.io
+        #     environment=os.environ["PINECONE_ENVIRONMENT"],  # next to api key in console
+        # )
+        # index_name = PINECONE_INDEX_NAME
+        # metadata = {id: embedding_val, type: 'document'}
+        # vectorstore = Pinecone.from_texts(texts=[str(chunk) for chunk in text_chunks], metadata=metadata, embedding=embeddings, index_name=index_name)
+
+        vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
+        vectorstore.save_local(
+            folder_path = f"./store/", 
+            index_name = file_id
+        )
+
         return vectorstore
 
     def get_conversation_chain(vectorstore, temp, model):
         llm = ChatOpenAI(openai_api_key=open_ai_key.attribute, temperature=temp, model_name=model)
         memory = ConversationBufferMemory(
-            memory_key='chat_history', return_messages=True)
+            memory_key='chat_history', 
+            return_messages=True
+        )
         conversation_chain = ConversationalRetrievalChain.from_llm(
             llm=llm,
             retriever=vectorstore.as_retriever(),
@@ -171,7 +179,7 @@ class LibForEmbedding:
             script.extract()
 
         cleaned_text_content = soup.get_text()
-        return text
+        return str(text)
     
     
     # Single PDF
@@ -181,7 +189,8 @@ class LibForEmbedding:
         for page in pdf_reader.pages:
             text += page.extract_text()
         return text
-
+    
+    # Multiple PDFs
     def get_pdfs_text(pdf_docs):
         text = ""
         for pdf in pdf_docs:
@@ -192,7 +201,16 @@ class LibForEmbedding:
                 text_temp += page.extract_text()
             text += text_temp
         return text
+    
+    # Single Txt
+    def get_txt_text(text_file):
+        text = ""
+        SaveData.save_attr(text_file)
+        for line in text_file:
+                text = text +  str(line.decode())
+        return text
 
+    # Multiple Txts
     def get_txts_text(txt_files):
         text = ""
         for txt in txt_files:
@@ -227,20 +245,10 @@ class EmbeddingURL(APIView):
     def post(self, request, format=None):
         input_data = request.data
         url = input_data['site_url']
-        # user_promts = input_data['userPrompts']
-        prompt = set_prompt()
-        EMBEDDING_VAL = url
-        EMBEDDING_TYPE = 'url'
-        request.session["conversation"] = None
-        print("== 1")
         raw_text = LibForEmbedding.get_url_text(url)
-        print("== 2")
         text_chunks = LibForEmbedding.get_text_chunks(raw_text)
-        print("== 3")
-        vectorstore = LibForEmbedding.get_vectorstore(text_chunks, url)
-        print("== 4")
-        request.session.conversation = LibForEmbedding.get_conversation_chain(
-            vectorstore, temp=TEMP, model=MODEL)
+        file_id = LangChainAttr.objects.latest('id').id
+        vectorstore = LibForEmbedding.get_vectorstore(text_chunks, file_id)
 
         return Response({"status": 'success', "data": 'success' }, status=status.HTTP_201_CREATED)    
     
@@ -249,19 +257,13 @@ class EmbeddingPDF(APIView):
     renderer_classes = [UserRenderer]
 
     def post(self, request, format=None):
-        input_data = request.data
         files = request.FILES.getlist('files')
 
-        request.session["conversation"] = None
-        EMBEDDING_VAL = files
-        EMBEDDING_TYPE = 'pdf'
-        raw_text = LibForEmbedding.get_pdfs_text(files)
-        text_chunks = LibForEmbedding.get_text_chunks(raw_text)
-        vectorstore = LibForEmbedding.get_vectorstore(text_chunks,files)
-        
-        request.session.conversation = LibForEmbedding.get_conversation_chain(
-            vectorstore, temp=TEMP, model=MODEL)
-
+        for file in files:
+            raw_text = LibForEmbedding.get_pdf_text(file)
+            text_chunks = LibForEmbedding.get_text_chunks(raw_text)
+            file_id = LangChainAttr.objects.latest('id').id
+            vectorstore = LibForEmbedding.get_vectorstore(text_chunks, file_id)
         
         return Response({"status": 'success', "data": 'success' }, status=status.HTTP_201_CREATED)
 
@@ -285,23 +287,24 @@ class EmbeddingCSV(APIView):
                 for chunk in csv_file.chunks():
                     destination.write(chunk)
             destination.close()
+
             csv_loader = CSVLoader(
-                'tmp/temp_uploaded_file.csv', 
+                'tmp/temp_uploaded_file.csv',
                 encoding="utf-8",
-                # csv_args={
-                #     # 'quotechar': '"',
-                #     'delimiter': ',',
-                #     'fieldnames': ['furniture','type','url','rate','delivery','sale','price']
-                # },
+                csv_args={
+                    # 'quotechar': '"',
+                    'fieldnames': ['OrderDate', 'Region', 'Rep', 'Item', 'Sold Units', 'Unit Cost', 'Total'],
+                    'delimiter': ','
+                },
             )
             documents = csv_loader.load()
+            print("documents = ", documents)
             text_splitter = CharacterTextSplitter(chunk_size=400, chunk_overlap=0)
             text_chunks = text_splitter.split_documents(documents)
-            vectorstore = LibForEmbedding.get_vectorstore(text_chunks,csv_file)
+            # vectorstore = LibForEmbedding.get_vectorstore(text_chunks,csv_file)
+            vectorstore = LibForEmbedding.get_vectorstore(documents, files)
+
             SaveData.save_attr(csv_file)
-            request.session.conversation = LibForEmbedding.get_conversation_chain(
-            vectorstore, temp=TEMP, model=MODEL)
-        
         return Response({"status": 'success', "data": 'success' }, status=status.HTTP_201_CREATED)    
 
 
@@ -309,18 +312,13 @@ class EmbeddingTXT(APIView):
     renderer_classes = [UserRenderer]
 
     def post(self, request, format=None):
-        input_data = request.data
         files = request.FILES.getlist('files')
-        EMBEDDING_VAL = files   
-        EMBEDDING_TYPE = 'txt'
-        request.session["conversation"] = None
-        raw_text = LibForEmbedding.get_txts_text(files)
-        text_chunks = LibForEmbedding.get_text_chunks(raw_text)
-        vectorstore = LibForEmbedding.get_vectorstore(text_chunks,files)
-        
-        request.session.conversation = LibForEmbedding.get_conversation_chain(
-            vectorstore, temp=TEMP, model=MODEL)
 
+        for file in files:
+            # request.session["conversation"] = None
+            raw_text = LibForEmbedding.get_txt_text(file)
+            text_chunks = LibForEmbedding.get_text_chunks(raw_text)
+            vectorstore = LibForEmbedding.get_vectorstore(text_chunks, file)
         
         return Response({"status": 'success', "data": 'success' }, status=status.HTTP_201_CREATED)    
     
@@ -332,13 +330,13 @@ class CHAT(APIView):
         user_promts = input_data['userPrompts']
         prompt = set_prompt()
         history = []
-        # files = input_data['files']
+        fileList = input_data['fileList']
+        
         if 'history' in input_data:
             history = input_data['history']
         MODEL = input_data['modal']
         
         print("modal = ", MODEL)
-        fileList = input_data['fileList']
         current_date = datetime.now().date()
         desired_difference = current_date - timedelta(days=7)
         # .filter(Q(attribute__in=fileList))    
@@ -346,16 +344,31 @@ class CHAT(APIView):
         # results = LangChainAttr.objects.annotate(date_difference=F('created_at') - desired_difference).filter(date_difference__lte=timedelta(days=7))
         if len(approve_file_list) == 0:
             return Response({"status": 'success', "answer": "expired embedding data.", "history" :history }, status=status.HTTP_201_CREATED)    
-        stripped_user_promps = user_promts.strip()
-        index = pinecone.Index(PINECONE_INDEX_NAME)
-        embedding = OpenAIEmbeddings(openai_api_key=open_ai_key.attribute)
-        vectorstore = Pinecone(index, embedding.embed_query, "text")
+        embeddings = OpenAIEmbeddings(openai_api_key=open_ai_key.attribute)
         
+        # PineCone
+        # index = pinecone.Index(PINECONE_INDEX_NAME)
+        # vectorstore = Pinecone(index, embedding.embed_query, "text")
+        
+        # FAISS
+        vectorstore = FAISS.load_local(f"./store/", embeddings, fileList[0])
+        for file in fileList:
+            if(file == fileList[0]): continue
+            loaded_vectorestore = FAISS.load_local(f"./store/", embeddings, file)
+            vectorstore.merge_from(loaded_vectorestore)
+            
         conversation = LibForEmbedding.get_conversation_chain(
-            vectorstore, temp=TEMP, model=MODEL)
+            vectorstore,
+            temp=TEMP,
+            model=MODEL
+        )
         temp = [tuple((row[0], row[1]) for row in history)]
         conversation_result = conversation(
-        {'question': (prompt+user_promts), "chat_history": temp})
+            {
+                'question': (prompt+user_promts), 
+                'chat_history': temp
+            }
+        )
         history.append(tuple(([user_promts, conversation_result['answer']])))
         
         return Response({"status": 'success', "answer": conversation_result['answer'], "history" :history }, status=status.HTTP_201_CREATED)    
@@ -481,5 +494,10 @@ class GetEmbeddingData(APIView):
         file_list = LangChainAttr.objects.annotate(date_difference=F('created_at') - desired_difference).filter(Q(date_difference__lte=timedelta(days=7)) & Q(attr_type='document'))
         result = []
         for row in file_list:
-            result.append(row.attribute)
+            result.append(
+                [
+                    row.id,
+                    row.attribute
+                ]
+            )
         return Response(data = result,status=status.HTTP_200_OK)

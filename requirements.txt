@@ -93,3 +93,4 @@ slack
 slackclient
 slackeventsapi
 django_thread
+docarray
