@@ -184,6 +184,7 @@ class LibForEmbedding:
     
     # Single PDF
     def get_pdf_text(pdf):
+        SaveData.save_attr(pdf)
         text = ""
         pdf_reader = PdfReader(pdf)
         for page in pdf_reader.pages:
@@ -318,7 +319,8 @@ class EmbeddingTXT(APIView):
             # request.session["conversation"] = None
             raw_text = LibForEmbedding.get_txt_text(file)
             text_chunks = LibForEmbedding.get_text_chunks(raw_text)
-            vectorstore = LibForEmbedding.get_vectorstore(text_chunks, file)
+            file_id = LangChainAttr.objects.latest('id').id
+            vectorstore = LibForEmbedding.get_vectorstore(text_chunks, file_id)
         
         return Response({"status": 'success', "data": 'success' }, status=status.HTTP_201_CREATED)    
     
