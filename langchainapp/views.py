@@ -131,7 +131,16 @@ class SaveData:
                 return 'ok'  
             except:  
                 pass  
-        form = LangChainAttrForm() 
+        form = LangChainAttrForm()
+    
+    def remove_attr(id):
+        print("remove data = ", id)
+        remove_data = LangChainAttr.objects.get(id=id)
+        remove_data.delete()
+        path = './store/' + str(id)
+        print(path)
+        os.remove(path + '.faiss', dir_fd=None)
+        os.remove(path + '.pkl', dir_fd=None)
 
 class LibForEmbedding:
     def get_vectorstore(text_chunks, file_id):
@@ -324,6 +333,12 @@ class EmbeddingTXT(APIView):
         
         return Response({"status": 'success', "data": 'success' }, status=status.HTTP_201_CREATED)    
     
+
+class RemoveEmbedding(APIView):
+    def post(self, request, format=None):
+        index = request.data
+        SaveData.remove_attr(index['data'])
+        return Response({"status": 'success', "data": 'success' }, status=status.HTTP_201_CREATED)    
 
 class CHAT(APIView):
     

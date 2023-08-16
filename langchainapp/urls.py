@@ -6,6 +6,7 @@ urlpatterns = [
     path('pdf_embedding', EmbeddingPDF.as_view(), name="pdf_embedding"),
     path('csv_embedding', EmbeddingCSV.as_view(), name="csv_embedding"),
     path('txt_embedding', EmbeddingTXT.as_view(), name="txt_embedding"),
+    path('remove_embedding', RemoveEmbedding.as_view(), name="remove_embedding"),
     path('save_attr', LangAttr.as_view(), name="save_attr"),
     path('slack_bot', LangSlack.as_view(), name="slack-bot"),
     path('get_attr', GetLangAttr.as_view(), name="get_attr"),
