@@ -508,7 +508,8 @@ class GetEmbeddingData(APIView):
     def post(self, request, format=None):
         current_date = datetime.now().date()
         desired_difference = current_date - timedelta(days=7)
-        file_list = LangChainAttr.objects.annotate(date_difference=F('created_at') - desired_difference).filter(Q(date_difference__lte=timedelta(days=7)) & Q(attr_type='document'))
+        # file_list = LangChainAttr.objects.annotate(date_difference=F('created_at') - desired_difference).filter(Q(date_difference__lte=timedelta(days=7)) & Q(attr_type='document'))
+        file_list = LangChainAttr.objects.filter(Q(attr_type='document'))
         result = []
         for row in file_list:
             result.append(
