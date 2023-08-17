@@ -116,22 +116,11 @@ global conversation
 class SaveData:
     @staticmethod
     def save_attr(id):
-        save_data = None
-        if save_data is None:
-            save_data = {}
-        save_data['attribute'] = id
-        save_data['attr_type'] = 'document'
-        save_data['is_active'] = 1
-        
-        form = LangChainAttrForm(save_data)  
-        se = LangChainAttrForm(save_data)  
-        if form.is_valid(): 
-            try: 
-                form.save()  
-                return 'ok'  
-            except:  
-                pass  
-        form = LangChainAttrForm()
+        save_data = LangChainAttr()
+        save_data.attribute = id
+        save_data.attr_type = 'document'
+        save_data.is_active = 1
+        save_data.save()
     
     def remove_attr(id):
         print("remove data = ", id)
