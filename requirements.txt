@@ -94,3 +94,4 @@ slackclient
 slackeventsapi
 django_thread
 docarray
+psycopg2-binary
