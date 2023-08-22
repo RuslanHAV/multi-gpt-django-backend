@@ -61,7 +61,8 @@ from email.parser import Parser
 from email.message import EmailMessage
 from email.header import decode_header
 
-open_ai_key = LangChainAttr.objects.filter(Q(attr_type='open_ai_key')).latest('created_at')
+open_ai_key = LangChainAttr.objects.get(attr_type='open_ai_key').attribute
+print("openai api key = ", open_ai_key)
 
 def sanitize_header(header):
     decoded_header = decode_header(header)
@@ -133,7 +134,7 @@ class SaveData:
 
 class LibForEmbedding:
     def get_vectorstore(text_chunks, file_id):
-        embeddings = OpenAIEmbeddings(openai_api_key=open_ai_key.attribute)
+        embeddings = OpenAIEmbeddings(openai_api_key=open_ai_key)
 
         # PineCone
         # pinecone.init(
@@ -153,7 +154,7 @@ class LibForEmbedding:
         return vectorstore
 
     def get_conversation_chain(vectorstore, temp, model):
-        llm = ChatOpenAI(openai_api_key=open_ai_key.attribute, temperature=temp, model_name=model)
+        llm = ChatOpenAI(openai_api_key=open_ai_key, temperature=temp, model_name=model)
         memory = ConversationBufferMemory(
             memory_key='chat_history', 
             return_messages=True
@@ -343,14 +344,12 @@ class CHAT(APIView):
         MODEL = input_data['modal']
         
         print("modal = ", MODEL)
-        current_date = datetime.now().date()
-        desired_difference = current_date - timedelta(days=7)
-        # .filter(Q(attribute__in=fileList))    
-        approve_file_list = LangChainAttr.objects.annotate(date_difference=F('created_at') - desired_difference).filter(date_difference__lte=timedelta(days=7))
-        # results = LangChainAttr.objects.annotate(date_difference=F('created_at') - desired_difference).filter(date_difference__lte=timedelta(days=7))
-        if len(approve_file_list) == 0:
-            return Response({"status": 'success', "answer": "expired embedding data.", "history" :history }, status=status.HTTP_201_CREATED)    
-        embeddings = OpenAIEmbeddings(openai_api_key=open_ai_key.attribute)
+        # current_date = datetime.now().date()
+        # desired_difference = current_date - timedelta(days=7)
+        # approve_file_list = LangChainAttr.objects.annotate(date_difference=F('created_at') - desired_difference).filter(date_difference__lte=timedelta(days=7))
+        # if len(approve_file_list) == 0:
+        #     return Response({"status": 'success', "answer": "expired embedding data.", "history" :history }, status=status.HTTP_201_CREATED)    
+        embeddings = OpenAIEmbeddings(openai_api_key=open_ai_key)
         
         # PineCone
         # index = pinecone.Index(PINECONE_INDEX_NAME)
@@ -424,9 +423,8 @@ class LangSlack(APIView):
         prompt = set_prompt()
         history = []
         MODEL = 'gpt-3.5-turbo'
-        stripped_user_promps = text.strip()
         index = pinecone.Index(PINECONE_INDEX_NAME)
-        embedding = OpenAIEmbeddings(openai_api_key=open_ai_key.attribute)
+        embedding = OpenAIEmbeddings(openai_api_key=open_ai_key)
         vectorstore = Pinecone(index, embedding.embed_query, "text")
         conversation = LibForEmbedding.get_conversation_chain(
             vectorstore, temp=TEMP, model=MODEL)
@@ -497,8 +495,7 @@ class GetEmbeddingData(APIView):
     def post(self, request, format=None):
         current_date = datetime.now().date()
         desired_difference = current_date - timedelta(days=7)
-        file_list = LangChainAttr.objects.annotate(date_difference=F('created_at') - desired_difference).filter(Q(date_difference__lte=timedelta(days=7)) & Q(attr_type='document'))
-        # file_list = LangChainAttr.objects.filter(Q(attr_type='document')).order_by('id')
+        file_list = LangChainAttr.objects.filter(Q(attr_type='document')).order_by('id')
         print("list = ", file_list)
         result = []
         for row in file_list:
