@@ -147,8 +147,8 @@ class LibForEmbedding:
 
         vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
         vectorstore.save_local(
-            folder_path = f"./store/", 
-            index_name = file_id
+            folder_path = f"./store/{file_id}" 
+            # index_name = file_id
         )
 
         return vectorstore
@@ -349,10 +349,10 @@ class CHAT(APIView):
         print("file list = ", fileList)
         
         # FAISS
-        vectorstore = FAISS.load_local(f"./store/", embeddings, fileList[0])
+        vectorstore = FAISS.load_local(f"./store/{fileList[0]}", embeddings)
         for file in fileList:
             if(file == fileList[0]): continue
-            loaded_vectorestore = FAISS.load_local(f"./store/", embeddings, file)
+            loaded_vectorestore = FAISS.load_local(f"./store/{file}", embeddings)
             vectorstore.merge_from(loaded_vectorestore)
             
         conversation = LibForEmbedding.get_conversation_chain(
