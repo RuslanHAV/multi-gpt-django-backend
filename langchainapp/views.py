@@ -61,7 +61,7 @@ from email.parser import Parser
 from email.message import EmailMessage
 from email.header import decode_header
 
-open_ai_key = LangChainAttr.objects.get(attr_type='open_ai_key').attribute
+open_ai_key = LangChainAttr.objects.filter(attr_type='open_ai_key').order_by('-created_at').first().attribute
 print("openai api key = ", open_ai_key)
 
 def sanitize_header(header):
@@ -344,16 +344,9 @@ class CHAT(APIView):
         MODEL = input_data['modal']
         
         print("modal = ", MODEL)
-        # current_date = datetime.now().date()
-        # desired_difference = current_date - timedelta(days=7)
-        # approve_file_list = LangChainAttr.objects.annotate(date_difference=F('created_at') - desired_difference).filter(date_difference__lte=timedelta(days=7))
-        # if len(approve_file_list) == 0:
-        #     return Response({"status": 'success', "answer": "expired embedding data.", "history" :history }, status=status.HTTP_201_CREATED)    
         embeddings = OpenAIEmbeddings(openai_api_key=open_ai_key)
         
-        # PineCone
-        # index = pinecone.Index(PINECONE_INDEX_NAME)
-        # vectorstore = Pinecone(index, embedding.embed_query, "text")
+        print("file list = ", fileList)
         
         # FAISS
         vectorstore = FAISS.load_local(f"./store/", embeddings, fileList[0])
